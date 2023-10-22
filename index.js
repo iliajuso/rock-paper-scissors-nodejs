@@ -1,108 +1,189 @@
-const crypto = require("crypto");
-const readline = require("readline");
+const readline = require("readline-sync");
+const crypto = require("crypto-js");
 
-const moves = ["Rock", "Paper", "Scissors"]; 
-
-if (
-  moves.length % 2 === 0 ||
-  moves.length < 3 ||
-  new Set(moves).size !== moves.length
-) {
-  console.log("Invalid input. Please provide an odd number of unique moves.");
-  process.exit(1);
+function generateKey() {
+  const randomNumber = Math.random().toString();
+  return crypto.SHA256(randomNumber).toString();
 }
 
-const key = crypto.randomBytes(32).toString("hex");
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
-
-console.log(`HMAC key: ${key}`);
-
-function generateHMAC(key, data) {
-  const hmac = crypto.createHmac("sha256", key);
-  hmac.update(data);
-  return hmac.digest("hex");
+function generateHMAC(move, key) {
+  return crypto.HmacSHA256(move, key).toString();
 }
 
-console.log("Available moves:");
-moves.forEach((move, index) => {
-  console.log(`${index + 1} - ${move}`);
-});
-console.log("0 - exit");
-console.log("? - help");
-
-const computerMove = moves[Math.floor(Math.random() * moves.length)];
-
-const results = moves.map((_, i) => Array(moves.length));
-
-for (let i = 0; i < moves.length; i++) {
-  for (let j = 0; j < moves.length; j++) {
-    if (i === j) {
-      results[i][j] = "Draw";
-    } else if ((i + 1) % moves.length === j) {
-      results[i][j] = "Win";
-    } else {
-      results[i][j] = "Lose";
-    }
+function generateRulesTable(moves) {
+  const rules = [];
+  for (let i = 0; i < moves.length; i++) {
+    rules.push(generateRule(moves, i));
   }
-}
 
-function displayWinningTable() {
-  const moves = ["Rock", "Paper", "Scissors"];
-  const results = [
-    [() => "Draw", () => "Win", () => "Lose"],
-    [() => "Lose", () => "Draw", () => "Win"],
-    [() => "Win", () => "Lose", () => "Draw"],
-  ];
-
-  console.log("+---------------+------+-------+----------+");
-  console.log("|  PC\\User >    | Rock | Paper | Scissors |");
-  console.log("+---------------+------+-------+----------+");
-
-  moves.forEach((row, i) => {
-    const resultsRow = results[i].map((result) => {
-      const resultString = result().toString();
-      return " ".repeat(5 - resultString.length) + resultString;
-    });
-
-    console.log(`|  ${row.padEnd(12)} | ${resultsRow.join("|  ")}   |`);
-    console.log("+---------------+------+-------+----------+");
-  });
-
-}
-
-rl.question("Enter your move: ", (userInput) => {
-  if (userInput === "?") {
-    displayWinningTable();
-  } else {
-    const userMoveIndex = parseInt(userInput);
-
-    if (userMoveIndex === 0) {
-      console.log("Exiting the game.");
-    } else if (userMoveIndex >= 1 && userMoveIndex <= moves.length) {
-      const userMove = moves[userMoveIndex - 1];
-      console.log(`Your move: ${userMove}`);
-      console.log(`Computer move: ${computerMove}`);
-      const middleIndex = Math.floor(moves.length / 2);
-      const userWinningMoves = moves.slice(middleIndex + 1);
-      if (userMove === computerMove) {
-        console.log("It's a draw!");
-      } else if (userWinningMoves.includes(userMove)) {
-        console.log("You win!");
+  const table = [];
+  for (let i = 0; i < rules.length + 1; i++) {
+    table[i] = [];
+  }
+  table[0][0] = "v PC\User >";
+  for (let i = 0; i < rules.length; i++) {
+    table[0][i + 1] = table[i + 1][0] = rules[i].move ;
+  }
+  for (let i = 1; i < table.length; i++) {
+    for (let j = 1; j < table.length; j++) {
+      if (rules[i - 1].strongerMoves.includes(table[0][j])) {
+        table[i][j] = " lose";
+      } else if (rules[i - 1].weakerMoves.includes(table[0][j])) {
+        table[i][j] = "win";
       } else {
-        console.log("Computer wins!");
+        table[i][j] = "draw";
+        
       }
-      const hmac = generateHMAC(key, userMove);
-      console.log(`HMAC: ${hmac}`);
-    } else {
-      console.log(
-        "Invalid input. Please enter a valid move number or '0' to exit."
-      );
     }
   }
+  return table;
+}
 
-  rl.close();
-});
+function generateRule(moves, index) {
+  const move = moves[index];
+  const weakerMoves = generateWeakerMoves(moves, index, 1);
+  const strongerMoves = generateStrongerMoves(
+    moves,
+    index,
+    (moves.length - 1) / 2 + 1
+  );
+  return { move, weakerMoves, strongerMoves };
+}
+
+function generateWeakerMoves(moves, index, count) {
+  const weakerMoves = [];
+  while (count <= (moves.length - 1) / 2) {
+    weakerMoves.push(moves[(index + count) % moves.length]);
+    count++;
+  }
+  return weakerMoves;
+}
+
+function generateStrongerMoves(moves, index, count) {
+  const strongerMoves = [];
+  while (count <= moves.length - 1) {
+    strongerMoves.push(moves[(index + count) % moves.length]);
+    count++;
+  }
+  return strongerMoves;
+}
+
+function getRandomInt(max) {
+  return Math.floor(Math.random() * max);
+}
+
+function unique(arr) {
+  return new Set(arr).size === arr.length;
+}
+
+function playGame(moves) {
+  const movesLength = moves.length;
+  let fit = true;
+
+  if (movesLength === 0) {
+    console.log("No moves entered");
+    fit = false;
+  } else if (movesLength < 3) {
+    console.log("Minimum number of moves is 3");
+    fit = false;
+  } else if (movesLength % 2 === 0) {
+    console.log("Entered an even number of moves");
+    fit = false;
+  }
+
+  if (fit) {
+    let active = moves[2] ? true : false;
+
+    if (active && !unique(moves)) {
+      active = false;
+      console.log("Moves must be unique");
+    }
+
+    const compMoveChoose = moves[getRandomInt(moves.length)];
+
+    let userMoveChoose = null;
+
+    const key = generateKey();
+    const hmac = generateHMAC(compMoveChoose, key);
+    const table = generateRulesTable(moves);
+
+    let perform = false;
+
+    while (active) {
+      console.log("HMAC:\n" + hmac);
+      console.log("Available moves:");
+      moves.forEach((move, index) => {
+        console.log(index + 1 + " - " + move);
+      });
+      console.log("0 - exit");
+      console.log("? - help");
+      const choose = readline.question("Enter your move: ");
+
+      if (choose === "?") {
+        printTable(table);
+      } else if (choose == 0) {
+        active = false;
+        console.log("Exit");
+      } else {
+        userMoveChoose = moves[+choose - 1];
+      }
+
+      if (active && !userMoveChoose) {
+        console.log("Try again");
+      } else if (userMoveChoose) {
+        console.log("Your move: " + userMoveChoose);
+        active = false;
+        perform = true;
+      }
+    }
+
+    if (perform) {
+      console.log("Computer move: " + compMoveChoose);
+      fight(table, userMoveChoose, compMoveChoose);
+      console.log("HMAC key:\n" + key);
+    }
+  }
+}
+
+function printTable(table) {
+  for (let i = 0; i < table.length; i++) {
+    let print = "";
+    for (let j = 0; j < table.length; j++) {
+      print += table[i][j] + "  |";
+    }
+    console.log(print);
+  }
+  console.log();
+}
+
+function fight(table, userMove, compMove) {
+  for (let i = 1; i < table.length; i++) {
+    if (table[i][0] == compMove) {
+      for (let j = 1; j < table.length; j++) {
+        if (table[0][j] == userMove) {
+          switch (table[i][j]) {
+            case "<":
+              console.log("You win!");
+              break;
+            case ">":
+              console.log("You lost!");
+              break;
+            default:
+              console.log("Draw!");
+          }
+        }
+      }
+    }
+  }
+}
+
+const args = process.argv.slice(2);
+
+if (args.length < 3 || args.length % 2 === 0 || !unique(args)) {
+  console.log(
+    "Error. Please provide an odd number of unique moves (>=3) as command line arguments"
+  );
+  console.log("Example: node script.js rock paper scissors");
+} else {
+  playGame(args);
+}
